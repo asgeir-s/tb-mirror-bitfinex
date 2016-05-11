@@ -1,5 +1,6 @@
 {
   "ambientDependencies": {
+    "aws-sdk": "registry:dt/aws-sdk#0.0.0+20160505181932",
     "node": "registry:dt/node#4.0.0+20160509154515",
     "ws": "registry:dt/ws#0.0.0+20160317120654"
   }
