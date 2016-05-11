@@ -23,11 +23,11 @@ function setupWs(streamId, apiKey, apiSecret, reconnectRetrys) {
     resetTimeout();
     ws.on("open", () => {
         resetTimeout();
-        console.log("open");
+        log("open");
         reconnectRetrys = 0;
         const payload = "AUTH" + (new Date().getTime());
         const signature = crypto.createHmac("sha384", apiSecret).update(payload).digest("hex");
-        console.log("send subscribe message");
+        log("send subscribe message");
         ws.send(JSON.stringify({
             event: "auth",
             apiKey: apiKey,
@@ -35,9 +35,9 @@ function setupWs(streamId, apiKey, apiSecret, reconnectRetrys) {
             authPayload: payload
         }));
     });
-    ws.on("error", error => console.log("error: " + JSON.stringify(error)));
+    ws.on("error", error => log("error: " + JSON.stringify(error)));
     ws.on("close", (code, message) => {
-        console.log("CLOSE: code: " + code + ", message: " + message);
+        log("CLOSE: code: " + code + ", message: " + message);
         ws.terminate();
     });
     ws.on("message", (rawData, flags) => {
@@ -46,36 +46,36 @@ function setupWs(streamId, apiKey, apiSecret, reconnectRetrys) {
         if (data[1] === "ps") {
             const positionBtcUsd = R.find((pos => pos[0] === "BTCUSD"), data[2]);
             if (positionBtcUsd == null) {
-                console.log("position: CLOSE");
+                log("position: CLOSE");
             }
             else if (positionBtcUsd[1] === "ACTIVE") {
                 if (positionBtcUsd[2] > 0) {
-                    console.log("position: LONG");
+                    log("position: LONG");
                 }
                 else if (positionBtcUsd[2] < 0) {
-                    console.log("position: SHORT");
+                    log("position: SHORT");
                 }
             }
         }
         else if (data[1] === "pu" && data[2][0] === "BTCUSD" && data[2][1] === "ACTIVE") {
             if (data[2][2] > 0) {
-                console.log("position: LONG");
+                log("position: LONG");
             }
             else if (data[2][2] < 0) {
-                console.log("position: SHORT");
+                log("position: SHORT");
             }
         }
         else if (data[1] === "pc" && data[2][0] === "BTCUSD" && data[2][1] === "CLOSED") {
-            console.log("position: CLOSE");
+            log("position: CLOSE");
         }
         else if (data.event != null && data.event === "info") {
-            console.log("got info event: " + JSON.stringify(data));
+            log("got info event: " + JSON.stringify(data));
             if (data.code === 20051 || data.code === 20061) {
                 ws.terminate();
             }
         }
         else if (data.event === "auth" && data.status === "FAILED") {
-            console.log("failed to authenticate for streamId: " + streamId + ". Will not try to reconnect.");
+            log("failed to authenticate for streamId: " + streamId + ". Will not try to reconnect.");
             ws.terminate();
             clearTimeout(timeout);
         }
@@ -86,6 +86,9 @@ function setupWs(streamId, apiKey, apiSecret, reconnectRetrys) {
             ws.terminate();
             setupWs(streamId, apiKey, apiSecret, reconnectRetrys + 1);
         }, 10000);
+    }
+    function log(message) {
+        console.log("[" + streamId + "] " + message);
     }
     return ws;
 }
