@@ -38,3 +38,4 @@ jspm_packages
 Status API Training Shop Blog About
 **.js
 /typings
+**/.DS_store

@@ -4,22 +4,23 @@ import * as R from "ramda"
 import { DynamoDB } from "aws-sdk"
 
 // get all mirrors with streamId, apiKey and apiSecret
+const documentClient = new DynamoDB.DocumentClient({
+  "region": "us-east-1"
+}) as any
 
 // for each mirror setupWS
 
-DynamoDB
-
-setupWs(
-  "some-stream-id",
-  "KXogve6W91hVa2ZSTkjpVaBYSwCv8CaGY0arNX4Phq6",
-  "uM2uUr52o3W1Q4BIIKnwmknjPDOK08E6m1v5mXpxwDA",
-  0)
-
-setupWs(
-  "some-stream-id",
-  "MlDmSkVYVK2ls9dbI5UcyGKzz7b3wWNc6iimAwv3nRA",
-  "Phh7c6gT2Zg0RjFaVKkY1tRhD87DJvvxLon6HKw0aEQ",
-  0)
+documentClient.scan({
+  TableName: "mirror-bitfinex"
+}, (err: any, data: any) => {
+  if (err) {
+    console.log(err)
+  }
+  else {
+    console.log(data)
+    data.Items.forEach((item: any) => setupWs(item.streamId, item.apiKey, item.apiSecret, 0))
+  }
+})
 
 function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectRetrys: number): WebSocket {
   const ws = new WebSocket("wss://api2.bitfinex.com:3000/ws")
@@ -95,6 +96,7 @@ function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectR
 
     else if (data.event === "auth" && data.status === "FAILED") {
       console.log("failed to authenticate for streamId: " + streamId + ". Will not try to reconnect.")
+      ws.terminate()
       clearTimeout(timeout)
     }
     // console.log("data[1] " + data[1])
