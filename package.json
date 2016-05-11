@@ -1,0 +1,11 @@
+{
+  "name": "tb-mirror-bitfinex",
+  "version": "0.0.1",
+  "description": "Mirror active position into TradersBit",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Cluda",
+  "license": "ISC"
+}
