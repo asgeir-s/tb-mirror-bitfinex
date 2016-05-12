@@ -6,12 +6,14 @@ import * as http from "http"
 import * as https from "https"
 import * as Promise from "bluebird"
 
+const cryptAlgorithm = "aes-256-ctr"
 const mirrorTableName = process.env.MIRROR_TABLE
 const signalServiceUrl = process.env.SIGNAL_SERVICE_URL
 const signalServiceApiKey = process.env.SIGNAL_SERVICE_API_KEY
 const documentClient: any = new DynamoDB.DocumentClient({
   "region": process.env.REGION
 })
+const apiKeyEncryptionPassword = process.env.API_KEY_CRYPTO_PASSWORD
 
 const mirrors = new Map<string, any>()
 
@@ -22,7 +24,11 @@ http.createServer((request: any, response: any) => {
       .map((mirror: Mirror) => {
         if (!mirrors.has(mirror.streamId)) {
           console.log("new web socket for stream with id: " + mirror.streamId)
-          mirrors.set(mirror.streamId, setupWs(mirror.streamId, mirror.apiKey, mirror.apiSecret, 0))
+          mirrors.set(mirror.streamId, setupWs(
+            mirror.streamId,
+            decryptSimple(apiKeyEncryptionPassword, mirror.apiKey),
+            decryptSimple(apiKeyEncryptionPassword, mirror.apiSecret),
+            0))
         }
       })
       .then(response.end("OK"))
@@ -32,7 +38,10 @@ http.createServer((request: any, response: any) => {
 getAllMirrorsFromDynamo(documentClient, mirrorTableName)
   .map((mirror: Mirror) => {
     console.log("initial setup of websockets")
-    mirrors.set(mirror.streamId, setupWs(mirror.streamId, mirror.apiKey, mirror.apiSecret, 0))
+    mirrors.set(mirror.streamId, setupWs(mirror.streamId,
+      decryptSimple(apiKeyEncryptionPassword, mirror.apiKey),
+      decryptSimple(apiKeyEncryptionPassword, mirror.apiSecret),
+      0))
   })
 
 function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectRetrys: number): WebSocket {
@@ -186,6 +195,13 @@ function getAllMirrorsFromDynamo(documentClient: any, tableName: string) {
       }
     })
   })
+}
+
+export function decryptSimple(password: string, encryptedContent: string): string {
+  const decipher = crypto.createDecipher(cryptAlgorithm, password)
+  let dec = decipher.update(encryptedContent, "hex", "utf8")
+  dec += decipher.final("utf8")
+  return dec
 }
 
 function guid(): string {
