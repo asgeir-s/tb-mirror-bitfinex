@@ -6,11 +6,11 @@ const aws_sdk_1 = require("aws-sdk");
 const http = require("http");
 const https = require("https");
 const Promise = require("bluebird");
-const mirrorTableName = "mirror-bitfinex";
-const signalServiceUrl = "ms-signals.tradersbit.com";
-const signalServiceApiKey = "Q20fqA194LVw3194xMR5Ue3rcd0hsg2qIgbd4HEklpmqPPxqLYdK473guaq78yYI6JINAj9C7UPBorKCtJ197A32UOc0gD2VfE3h";
+const mirrorTableName = process.env.MIRROR_TABLE;
+const signalServiceUrl = process.env.SIGNAL_SERVICE_URL;
+const signalServiceApiKey = process.env.SIGNAL_SERVICE_API_KEY;
 const documentClient = new aws_sdk_1.DynamoDB.DocumentClient({
-    "region": "us-east-1"
+    "region": process.env.REGION
 });
 const mirrors = new Map();
 http.createServer((request, response) => {
@@ -25,7 +25,7 @@ http.createServer((request, response) => {
         })
             .then(response.end("OK"));
     }
-}).listen(8080);
+}).listen(80);
 getAllMirrorsFromDynamo(documentClient, mirrorTableName)
     .map((mirror) => {
     console.log("initial setup of websockets");
@@ -131,11 +131,9 @@ function postSignal(signalServiceUrl, signalServiceApiKey, GRID, streamId, signa
         }, res => {
             let responseString = "";
             res.on("data", (data) => {
-                console.log("data " + data);
                 responseString += data;
             });
             res.on("end", () => {
-                console.log("end ");
                 resolve(JSON.parse(responseString));
             });
             res.on("error", () => postSignal(signalServiceUrl, signalServiceApiKey, GRID, streamId, signal, retrysLeft - 1));
