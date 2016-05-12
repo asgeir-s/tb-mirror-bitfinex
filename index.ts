@@ -164,7 +164,7 @@ export function postSignal(signalServiceUrl: string, signalServiceApiKey: string
         responseString += data
       })
       res.on("end", () => {
-        resolve(JSON.parse(responseString))
+        resolve(JSON.parse(responseString) || responseString)
       })
       res.on("error", () => postSignal(signalServiceUrl, signalServiceApiKey, GRID, streamId, signal, retrysLeft - 1))
     }).end(signal.toString())
