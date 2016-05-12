@@ -134,7 +134,9 @@ function postSignal(signalServiceUrl, signalServiceApiKey, GRID, streamId, signa
                 responseString += data;
             });
             res.on("end", () => {
-                resolve(JSON.parse(responseString) || responseString);
+                (responseString.indexOf("duplicate") > -1) ?
+                    resolve(responseString) :
+                    resolve(JSON.parse(responseString));
             });
             res.on("error", () => postSignal(signalServiceUrl, signalServiceApiKey, GRID, streamId, signal, retrysLeft - 1));
         }).end(signal.toString());

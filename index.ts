@@ -145,7 +145,7 @@ function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectR
 export function postSignal(signalServiceUrl: string, signalServiceApiKey: string, GRID: string,
   streamId: string, signal: number, retrysLeft: number): Promise<any> {
   console.log("[" + streamId + "] posting signal: " + signal + ", with GRID: " + GRID)
-  return new Promise<Array<Signal>>((resolve, reject) => {
+  return new Promise<Array<Signal> | string>((resolve, reject) => {
     if (retrysLeft === 0) {
       reject("no more retrys. Failed to post signal")
     }
@@ -164,7 +164,9 @@ export function postSignal(signalServiceUrl: string, signalServiceApiKey: string
         responseString += data
       })
       res.on("end", () => {
-        resolve(JSON.parse(responseString) || responseString)
+        (responseString.indexOf("duplicate") > -1) ?
+          resolve(responseString) :
+          resolve(JSON.parse(responseString))
       })
       res.on("error", () => postSignal(signalServiceUrl, signalServiceApiKey, GRID, streamId, signal, retrysLeft - 1))
     }).end(signal.toString())
