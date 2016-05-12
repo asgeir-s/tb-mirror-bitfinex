@@ -2,13 +2,40 @@ import * as WebSocket from "ws"
 import * as crypto from "crypto"
 import * as R from "ramda"
 import { DynamoDB } from "aws-sdk"
+import * as http from "http"
+
+const mirrors = new Map<string, any>()
+
+http.createServer((request: any, response: any) => {
+  if (request.method === "GET" && request.url === "/new-mirror") {
+    documentClient.scan({
+      TableName: "mirror-bitfinex"
+    }, (err: any, data: any) => {
+      if (err) {
+        console.log(err)
+      }
+      else {
+        console.log("setting up new websocket(s)")
+        console.log(data)
+        data.Items.forEach((item: any) => {
+          if (!mirrors.has(item.streamId)) {
+            console.log("new web socket for stream with id: " + item.streamId)
+            mirrors.set(item.streamId, setupWs(item.streamId, item.apiKey, item.apiSecret, 0))
+          }
+        })
+      }
+    })
+    response.end("OK")
+  }
+}).listen(8080)
 
 // get all mirrors with streamId, apiKey and apiSecret
-const documentClient = new DynamoDB.DocumentClient({
+const documentClient: any = new DynamoDB.DocumentClient({
   "region": "us-east-1"
-}) as any
+})
 
 // for each mirror setupWS
+// todo: find a way to notefy when new "mirrors" are added
 
 documentClient.scan({
   TableName: "mirror-bitfinex"
@@ -17,8 +44,11 @@ documentClient.scan({
     console.log(err)
   }
   else {
+    console.log("initial setup of websockets")
     console.log(data)
-    data.Items.forEach((item: any) => setupWs(item.streamId, item.apiKey, item.apiSecret, 0))
+    data.Items.forEach((item: any) => {
+      mirrors.set(item.streamId, setupWs(item.streamId, item.apiKey, item.apiSecret, 0))
+    })
   }
 })
 
@@ -96,6 +126,7 @@ function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectR
 
     else if (data.event === "auth" && data.status === "FAILED") {
       log("failed to authenticate for streamId: " + streamId + ". Will not try to reconnect.")
+      mirrors.set(streamId, "could not authenticate")
       ws.terminate()
       clearTimeout(timeout)
     }

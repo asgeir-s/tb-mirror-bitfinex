@@ -3,6 +3,30 @@ const WebSocket = require("ws");
 const crypto = require("crypto");
 const R = require("ramda");
 const aws_sdk_1 = require("aws-sdk");
+const http = require("http");
+const mirrors = new Map();
+http.createServer((request, response) => {
+    if (request.method === "GET" && request.url === "/new-mirror") {
+        documentClient.scan({
+            TableName: "mirror-bitfinex"
+        }, (err, data) => {
+            if (err) {
+                console.log(err);
+            }
+            else {
+                console.log("setting up new websocket(s)");
+                console.log(data);
+                data.Items.forEach((item) => {
+                    if (!mirrors.has(item.streamId)) {
+                        console.log("new web socket for stream with id: " + item.streamId);
+                        mirrors.set(item.streamId, setupWs(item.streamId, item.apiKey, item.apiSecret, 0));
+                    }
+                });
+            }
+        });
+        response.end("OK");
+    }
+}).listen(8080);
 const documentClient = new aws_sdk_1.DynamoDB.DocumentClient({
     "region": "us-east-1"
 });
@@ -13,8 +37,11 @@ documentClient.scan({
         console.log(err);
     }
     else {
+        console.log("initial setup of websockets");
         console.log(data);
-        data.Items.forEach((item) => setupWs(item.streamId, item.apiKey, item.apiSecret, 0));
+        data.Items.forEach((item) => {
+            mirrors.set(item.streamId, setupWs(item.streamId, item.apiKey, item.apiSecret, 0));
+        });
     }
 });
 function setupWs(streamId, apiKey, apiSecret, reconnectRetrys) {
@@ -76,6 +103,7 @@ function setupWs(streamId, apiKey, apiSecret, reconnectRetrys) {
         }
         else if (data.event === "auth" && data.status === "FAILED") {
             log("failed to authenticate for streamId: " + streamId + ". Will not try to reconnect.");
+            mirrors.set(streamId, "could not authenticate");
             ws.terminate();
             clearTimeout(timeout);
         }
