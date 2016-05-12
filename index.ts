@@ -3,54 +3,37 @@ import * as crypto from "crypto"
 import * as R from "ramda"
 import { DynamoDB } from "aws-sdk"
 import * as http from "http"
+import * as https from "https"
+import * as Promise from "bluebird"
+
+const mirrorTableName = process.env.MIRROR_TABLE
+const signalServiceUrl = process.env.SIGNAL_SERVICE_URL
+const signalServiceApiKey = process.env.SIGNAL_SERVICE_API_KEY
+const documentClient: any = new DynamoDB.DocumentClient({
+  "region": process.env.REGION
+})
 
 const mirrors = new Map<string, any>()
 
 http.createServer((request: any, response: any) => {
   if (request.method === "GET" && request.url === "/new-mirror") {
-    documentClient.scan({
-      TableName: "mirror-bitfinex"
-    }, (err: any, data: any) => {
-      if (err) {
-        console.log(err)
-      }
-      else {
-        console.log("setting up new websocket(s)")
-        console.log(data)
-        data.Items.forEach((item: any) => {
-          if (!mirrors.has(item.streamId)) {
-            console.log("new web socket for stream with id: " + item.streamId)
-            mirrors.set(item.streamId, setupWs(item.streamId, item.apiKey, item.apiSecret, 0))
-          }
-        })
-      }
-    })
-    response.end("OK")
+    console.log("setup new websocket(s)")
+    getAllMirrorsFromDynamo(documentClient, mirrorTableName)
+      .map((mirror: Mirror) => {
+        if (!mirrors.has(mirror.streamId)) {
+          console.log("new web socket for stream with id: " + mirror.streamId)
+          mirrors.set(mirror.streamId, setupWs(mirror.streamId, mirror.apiKey, mirror.apiSecret, 0))
+        }
+      })
+      .then(response.end("OK"))
   }
-}).listen(8080)
+}).listen(80)
 
-// get all mirrors with streamId, apiKey and apiSecret
-const documentClient: any = new DynamoDB.DocumentClient({
-  "region": "us-east-1"
-})
-
-// for each mirror setupWS
-// todo: find a way to notefy when new "mirrors" are added
-
-documentClient.scan({
-  TableName: "mirror-bitfinex"
-}, (err: any, data: any) => {
-  if (err) {
-    console.log(err)
-  }
-  else {
+getAllMirrorsFromDynamo(documentClient, mirrorTableName)
+  .map((mirror: Mirror) => {
     console.log("initial setup of websockets")
-    console.log(data)
-    data.Items.forEach((item: any) => {
-      mirrors.set(item.streamId, setupWs(item.streamId, item.apiKey, item.apiSecret, 0))
-    })
-  }
-})
+    mirrors.set(mirror.streamId, setupWs(mirror.streamId, mirror.apiKey, mirror.apiSecret, 0))
+  })
 
 function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectRetrys: number): WebSocket {
   const ws = new WebSocket("wss://api2.bitfinex.com:3000/ws")
@@ -76,7 +59,7 @@ function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectR
   ws.on("error", error => log("error: " + JSON.stringify(error)))
 
   ws.on("close", (code: number, message: string) => {
-    log("CLOSE: code: " + code + ", message: " + message)
+    log("CLOSE websocket: code: " + code + ", message: " + message)
     ws.terminate()
   })
 
@@ -90,30 +73,37 @@ function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectR
       const positionBtcUsd = R.find((pos => pos[0] === "BTCUSD"), data[2] as Array<Array<any>>)
 
       if (positionBtcUsd == null) {
-        log("position: CLOSE")
+        postSignal(signalServiceUrl, signalServiceApiKey, guid(), streamId, 0, 4)
+          .then((signal) => log("postSignal responds: " + JSON.stringify(signal)))
       }
 
       else if (positionBtcUsd[1] === "ACTIVE") {
         if (positionBtcUsd[2] > 0) {
-          log("position: LONG")
+          postSignal(signalServiceUrl, signalServiceApiKey, guid(), streamId, 1, 4)
+            .then((signal) => log("postSignal responds: " + JSON.stringify(signal)))
         }
         else if (positionBtcUsd[2] < 0) {
-          log("position: SHORT")
+          postSignal(signalServiceUrl, signalServiceApiKey, guid(), streamId, -1, 4)
+            .then((signal) => log("postSignal responds: " + JSON.stringify(signal)))
         }
       }
     }
 
     else if (data[1] === "pu" && data[2][0] === "BTCUSD" && data[2][1] === "ACTIVE") {
       if (data[2][2] > 0) {
-        log("position: LONG")
+        postSignal(signalServiceUrl, signalServiceApiKey, guid(), streamId, 1, 4)
+          .then((signal) => log("postSignal responds: " + JSON.stringify(signal)))
       }
       else if (data[2][2] < 0) {
-        log("position: SHORT")
+        postSignal(signalServiceUrl, signalServiceApiKey, guid(), streamId, -1, 4)
+          .then((signal) => log("postSignal responds: " + JSON.stringify(signal)))
       }
     }
 
     else if (data[1] === "pc" && data[2][0] === "BTCUSD" && data[2][1] === "CLOSED") {
-      log("position: CLOSE")
+      postSignal(signalServiceUrl, signalServiceApiKey, guid(), streamId, 0, 4)
+        .then((signal) => log("postSignal responds: " + JSON.stringify(signal)))
+
     }
 
     else if (data.event != null && data.event === "info") {
@@ -147,4 +137,75 @@ function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectR
   }
 
   return ws
+}
+
+/**
+ * Returns the created signal (with all 'Signal' attributes)
+ */
+export function postSignal(signalServiceUrl: string, signalServiceApiKey: string, GRID: string,
+  streamId: string, signal: number, retrysLeft: number): Promise<any> {
+  console.log("[" + streamId + "] posting signal: " + signal + ", with GRID: " + GRID)
+  return new Promise<Array<Signal>>((resolve, reject) => {
+    if (retrysLeft === 0) {
+      reject("no more retrys. Failed to post signal")
+    }
+    https.request({
+      host: signalServiceUrl,
+      path: "/streams/" + streamId + "/signals",
+      method: "POST",
+      headers: {
+        "Global-Request-ID": GRID,
+        "content-type": "application/json",
+        "Authorization": "apikey " + signalServiceApiKey
+      }
+    }, res => {
+      let responseString = ""
+      res.on("data", (data: any) => {
+        responseString += data
+      })
+      res.on("end", () => {
+        resolve(JSON.parse(responseString))
+      })
+      res.on("error", () => postSignal(signalServiceUrl, signalServiceApiKey, GRID, streamId, signal, retrysLeft - 1))
+    }).end(signal.toString())
+  })
+}
+
+function getAllMirrorsFromDynamo(documentClient: any, tableName: string) {
+  return new Promise<Array<Mirror>>((resolve, reject) => {
+    documentClient.scan({
+      TableName: "mirror-bitfinex"
+    }, (err: any, data: any) => {
+      if (err) {
+        reject(err)
+      }
+      else {
+        resolve(data.Items)
+      }
+    })
+  })
+}
+
+function guid(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0, v = c == "x" ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
+}
+
+interface Mirror {
+  streamId: string,
+  apiKey: string,
+  apiSecret: string
+}
+
+interface Signal {
+  timestamp: number
+  price: number
+  change: number
+  id: number
+  valueInclFee: number
+  changeInclFee: number
+  value: number
+  signal: number
 }

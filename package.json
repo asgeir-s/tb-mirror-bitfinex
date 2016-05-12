@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "aws-sdk": "^2.3.10",
+    "bluebird": "^3.3.5",
     "ramda": "^0.21.0",
     "ws": "^1.1.0"
   }
