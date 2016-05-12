@@ -6,12 +6,14 @@ const aws_sdk_1 = require("aws-sdk");
 const http = require("http");
 const https = require("https");
 const Promise = require("bluebird");
+const cryptAlgorithm = "aes-256-ctr";
 const mirrorTableName = process.env.MIRROR_TABLE;
 const signalServiceUrl = process.env.SIGNAL_SERVICE_URL;
 const signalServiceApiKey = process.env.SIGNAL_SERVICE_API_KEY;
 const documentClient = new aws_sdk_1.DynamoDB.DocumentClient({
     "region": process.env.REGION
 });
+const apiKeyEncryptionPassword = process.env.API_KEY_CRYPTO_PASSWORD;
 const mirrors = new Map();
 http.createServer((request, response) => {
     if (request.method === "GET" && request.url === "/new-mirror") {
@@ -20,7 +22,7 @@ http.createServer((request, response) => {
             .map((mirror) => {
             if (!mirrors.has(mirror.streamId)) {
                 console.log("new web socket for stream with id: " + mirror.streamId);
-                mirrors.set(mirror.streamId, setupWs(mirror.streamId, mirror.apiKey, mirror.apiSecret, 0));
+                mirrors.set(mirror.streamId, setupWs(mirror.streamId, decryptSimple(apiKeyEncryptionPassword, mirror.apiKey), decryptSimple(apiKeyEncryptionPassword, mirror.apiSecret), 0));
             }
         })
             .then(response.end("OK"));
@@ -29,7 +31,7 @@ http.createServer((request, response) => {
 getAllMirrorsFromDynamo(documentClient, mirrorTableName)
     .map((mirror) => {
     console.log("initial setup of websockets");
-    mirrors.set(mirror.streamId, setupWs(mirror.streamId, mirror.apiKey, mirror.apiSecret, 0));
+    mirrors.set(mirror.streamId, setupWs(mirror.streamId, decryptSimple(apiKeyEncryptionPassword, mirror.apiKey), decryptSimple(apiKeyEncryptionPassword, mirror.apiSecret), 0));
 });
 function setupWs(streamId, apiKey, apiSecret, reconnectRetrys) {
     const ws = new WebSocket("wss://api2.bitfinex.com:3000/ws");
@@ -157,6 +159,13 @@ function getAllMirrorsFromDynamo(documentClient, tableName) {
         });
     });
 }
+function decryptSimple(password, encryptedContent) {
+    const decipher = crypto.createDecipher(cryptAlgorithm, password);
+    let dec = decipher.update(encryptedContent, "hex", "utf8");
+    dec += decipher.final("utf8");
+    return dec;
+}
+exports.decryptSimple = decryptSimple;
 function guid() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
         const r = Math.random() * 16 | 0, v = c == "x" ? r : (r & 0x3 | 0x8);
