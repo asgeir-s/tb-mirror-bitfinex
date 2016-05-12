@@ -25,7 +25,7 @@ http.createServer((request, response) => {
         })
             .then(response.end("OK"));
     }
-}).listen(80);
+}).listen(process.env.PORT || 8888);
 getAllMirrorsFromDynamo(documentClient, mirrorTableName)
     .map((mirror) => {
     console.log("initial setup of websockets");
