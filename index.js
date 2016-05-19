@@ -53,8 +53,7 @@ function setupWs(streamId, apiKey, apiSecret, reconnectRetrys) {
     });
     ws.on("error", error => log("error: " + JSON.stringify(error)));
     ws.on("close", (code, message) => {
-        log("CLOSE websocket: code: " + code + ", message: " + message);
-        ws.terminate();
+        log("websocket closed: code: " + code + ", message: " + message + ". Will reconnect after timeout");
     });
     ws.on("message", (rawData, flags) => {
         resetTimeout();
@@ -98,17 +97,18 @@ function setupWs(streamId, apiKey, apiSecret, reconnectRetrys) {
         }
         else if (data.event === "auth" && data.status === "FAILED") {
             log("failed to authenticate for streamId: " + streamId + ". Will not try to reconnect.");
-            mirrors.set(streamId, "could not authenticate");
-            ws.terminate();
             clearTimeout(timeout);
+            ws.terminate();
+            mirrors.set(streamId, "could not authenticate");
         }
     });
     function resetTimeout() {
         clearTimeout(timeout);
         timeout = setTimeout(() => {
             ws.terminate();
-            setupWs(streamId, apiKey, apiSecret, reconnectRetrys + 1);
-        }, 10000);
+            mirrors.get(streamId).terminate();
+            mirrors.set(streamId, setupWs(streamId, apiKey, apiSecret, reconnectRetrys + 1));
+        }, 15000);
     }
     function log(message) {
         console.log("[" + streamId + "] " + message);

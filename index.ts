@@ -68,8 +68,7 @@ function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectR
   ws.on("error", error => log("error: " + JSON.stringify(error)))
 
   ws.on("close", (code: number, message: string) => {
-    log("CLOSE websocket: code: " + code + ", message: " + message)
-    ws.terminate()
+    log("websocket closed: code: " + code + ", message: " + message + ". Will reconnect after timeout")
   })
 
   ws.on("message", (rawData, flags) => {
@@ -125,9 +124,9 @@ function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectR
 
     else if (data.event === "auth" && data.status === "FAILED") {
       log("failed to authenticate for streamId: " + streamId + ". Will not try to reconnect.")
-      mirrors.set(streamId, "could not authenticate")
-      ws.terminate()
       clearTimeout(timeout)
+      ws.terminate()
+      mirrors.set(streamId, "could not authenticate")
     }
     // log("data[1] " + data[1])
     // log("message data: " + JSON.stringify(data))
@@ -137,8 +136,9 @@ function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectR
     clearTimeout(timeout)
     timeout = setTimeout(() => {
       ws.terminate()
-      setupWs(streamId, apiKey, apiSecret, reconnectRetrys + 1)
-    }, 10000)
+      mirrors.get(streamId).terminate()
+      mirrors.set(streamId, setupWs(streamId, apiKey, apiSecret, reconnectRetrys + 1))
+    }, 15000)
   }
 
   function log(message: string) {
