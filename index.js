@@ -53,7 +53,8 @@ function setupWs(streamId, apiKey, apiSecret, reconnectRetrys) {
     });
     ws.on("error", error => log("error: " + JSON.stringify(error)));
     ws.on("close", (code, message) => {
-        log("websocket closed: code: " + code + ", message: " + message + ". Will reconnect after timeout");
+        log("websocket closed: code: " + code + ", message: " + message + ". Will potensially reconnect after timeout. " +
+            "If not unable to authentificate.");
     });
     ws.on("message", (rawData, flags) => {
         resetTimeout();

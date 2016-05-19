@@ -68,7 +68,8 @@ function setupWs(streamId: string, apiKey: string, apiSecret: string, reconnectR
   ws.on("error", error => log("error: " + JSON.stringify(error)))
 
   ws.on("close", (code: number, message: string) => {
-    log("websocket closed: code: " + code + ", message: " + message + ". Will reconnect after timeout")
+    log("websocket closed: code: " + code + ", message: " + message + ". Will potensially reconnect after timeout. " +
+      "If not unable to authentificate.")
   })
 
   ws.on("message", (rawData, flags) => {
